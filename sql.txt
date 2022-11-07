@@ -1,2 +1,8 @@
 ALTER USER 'root'@'localhost' IDENTIFIED BY mysql-native-password with 'ur pass'
 
+sg-80-443
+
+html/
+
+
+
