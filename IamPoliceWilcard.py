@@ -7,7 +7,7 @@ import time
 def lambda_handler(event, context):
 
     client = boto3.client('iam')
-    policyArn = 'arn:aws:iam::811038047831:policy/rolepolicycheck'
+    policyArn = 'arn:aws:iam::<accountId>:policy/<policyname>'
     wildcard = '*'
 
     version = client.get_policy(
