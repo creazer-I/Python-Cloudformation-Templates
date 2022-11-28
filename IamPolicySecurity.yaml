@@ -1,0 +1,164 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  RuleName:
+    Type: String
+    Default: IamPolicyRule
+  LambdafnName:
+    Type: String
+    Default: IamPolicyPolice
+Resources:
+  IamLambdafunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: !Ref LambdafnName
+      Runtime: python3.9
+      Role: >-
+        arn:aws:iam::811038047831:role/service-role/post-terraformState-role-t30g5txf
+      Handler: index.lambda_handler
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import botocore
+          import time
+
+
+          def lambda_handler(event, context):
+              load = event['detail']
+              loadPolicyArn = load['responseElements']['policy']['arn']
+              client = boto3.client('iam')
+              policyArn = loadPolicyArn
+              wildcard = '*'
+
+              version = client.get_policy(
+                  PolicyArn=policyArn
+              )
+              getDefaultVersion = version['Policy']['DefaultVersionId']
+
+              explicit = []
+
+              for i in getDefaultVersion:
+                  version_number = i.isdigit()
+                  if (version_number == True):
+                      for j in range(0, int(i)):
+                          versions = 'v'+str(j+1)
+                          try:
+                              if (versions != 'v5'):
+                                  describe = client.get_policy_version(
+                                      PolicyArn=policyArn,
+                                      VersionId=versions
+                                  )
+                                  check = describe["PolicyVersion"]["Document"]["Statement"]
+                                  version = describe["PolicyVersion"]["VersionId"]
+                                  for i in check:
+                                      action = i["Action"]
+                                      for i in action:
+                                          explicit.append(i)
+                                  find = [s for s in explicit if wildcard in s]
+                                  if (len(find) > 0):
+                                      try:
+                                          delete = client.delete_policy_version(
+                                              PolicyArn=policyArn,
+                                              VersionId=version
+                                          )
+                                          print("Deleted :",delete)
+                                      except:
+                                          pass
+                                      finally:
+                                          deletePolicy = client.delete_policy(
+                                              PolicyArn=policyArn
+                                          )
+                                          print(
+                                              'Deleted Policy :', policyArn , 'cause of wildcard detected', deletePolicy)
+                                  else:
+                                      print("Policy:", policyArn , "no wildcard detected")
+                          except:
+                              pass
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+  LambdaExecutionPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: lambda-execution-policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'logs:CreateLogGroup'
+            Resource: !Join 
+              - ''
+              - - 'arn:aws:logs:'
+                - !Ref 'AWS::Region'
+                - ':'
+                - !Ref 'AWS::AccountId'
+                - ':*'
+          - Effect: Allow
+            Action:
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Resource:
+              - !Join 
+                - ''
+                - - 'arn:aws:logs:'
+                  - !Ref 'AWS::Region'
+                  - ':'
+                  - !Ref 'AWS::AccountId'
+                  - ':log-group:/aws/lambda/'
+                  - !Ref LambdafnName
+                  - ':*'
+      Roles:
+        - !Ref LambdaExecutionRole
+  eventrulerole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - events.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+  eventrule:
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Description: Api call from cloudtrail to event rule trigger lambda
+      EventBusName: default
+      EventPattern: >-
+        {"source": ["aws.iam"],"detail-type": ["AWS API Call via
+        CloudTrail"],"detail": {"eventSource":
+        ["iam.amazonaws.com"],"eventName": ["CreatePolicy"]}}
+      Name: !Ref RuleName
+      RoleArn: !GetAtt 
+        - eventrulerole
+        - Arn
+      Targets:
+        - Arn: !GetAtt 
+            - IamLambdafunction
+            - Arn
+          Id: !Ref IamLambdafunction
+  EventBridgeLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !GetAtt 
+        - IamLambdafunction
+        - Arn
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt 
+        - eventrule
+        - Arn
