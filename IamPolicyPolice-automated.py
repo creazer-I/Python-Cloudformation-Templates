@@ -50,8 +50,8 @@ def lambda_handler(event, context):
                                     PolicyArn=policyArn
                                 )
                                 print(
-                                    'Deleted Policy :', policyArn , 'cause of not following Rules', deletePolicy)
+                                    'Deleted Policy :', policyArn , 'cause of wildcard detected', deletePolicy)
                         else:
-                            print("Policy:", policyArn , "is following Rules according to Anirudh")
+                            print("Policy:", policyArn , "Wildcard not detected")
                 except:
                     pass
