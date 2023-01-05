@@ -12,8 +12,9 @@ Resources:
     Properties:
       FunctionName: !Ref LambdafnName
       Runtime: python3.9
-      Role: >-
-        arn:aws:iam::811038047831:role/service-role/post-terraformState-role-t30g5txf
+      Role: !GetAtt 
+        - LambdaExecutionRole
+        - Arn
       Handler: index.lambda_handler
       Code:
         ZipFile: |
