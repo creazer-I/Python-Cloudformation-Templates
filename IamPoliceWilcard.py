@@ -1,21 +1,19 @@
-import json
-import boto3
-import botocore
-import time
-
-
 def lambda_handler(event, context):
-
+    load = event['detail']
+    loadPolicyArn = load['responseElements']['policy']['arn']
     client = boto3.client('iam')
-    policyArn = 'arn:aws:iam::<accountId>:policy/<policyname>'
+    policyArn = loadPolicyArn
     wildcard = '*'
-
     version = client.get_policy(
         PolicyArn=policyArn
     )
     getDefaultVersion = version['Policy']['DefaultVersionId']
-
     explicit = []
+
+    # check if the policy is an AWS managed policy
+    if "aws-managed" in policyArn:
+        print("Skipping AWS managed policy:", policyArn)
+        return
 
     for i in getDefaultVersion:
         version_number = i.isdigit()
@@ -49,8 +47,8 @@ def lambda_handler(event, context):
                                     PolicyArn=policyArn
                                 )
                                 print(
-                                    "Deleted Policy cause of not following Rules", deletePolicy)
+                                    'Deleted Policy :', policyArn , 'cause of wildcard detected', deletePolicy)
                         else:
-                            print("Policy is following Rules according to Anirudh")
+                            print("Policy:", policyArn , "no wildcard detected")
                 except:
                     pass
