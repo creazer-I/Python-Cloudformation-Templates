@@ -1,0 +1,266 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  RuleName:
+    Type: String
+    Default: securitygroup-safety
+  LambdafnName:
+    Type: String
+    Default: securitygroup-openports-rule
+  EmailGroupName:
+    Type: String
+    Default: 'Developer-Group'
+  ConfigRuleName:
+    Type: String
+    Default: 'securitygroup-openports'
+  EndpointEmail:
+    Type: String
+    Default: 'test@email.com'
+
+Resources:
+  SNSTopic:
+    Type: 'AWS::SNS::Topic'
+    Properties:
+      TopicName: 'Config'
+
+  DevEmailGroup:
+    Type: 'AWS::SNS::Topic'
+    Properties:
+      TopicName: !Ref EmailGroupName
+      Subscription:
+      - 
+        Endpoint: !Ref EndpointEmail
+        Protocol: 'email'
+
+  Lambdafunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: !Ref LambdafnName
+      Runtime: python3.9
+      Role: !GetAtt 
+        - LambdaExecutionRole
+        - Arn
+      Handler: index.lambda_handler
+      Environment:
+        Variables:
+          TopicArn: !Ref SNSTopic
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+          import os
+          import datetime
+
+          email_sent = False
+
+          LoadTopicArn = os.environ["TopicArn"]
+
+          def lambda_handler(event, context):
+              global email_sent
+              ec2 = boto3.client('ec2')
+              config = boto3.client('config')
+
+              try:
+                  if len(event['resultToken']) > 0:
+                      security_groups = ec2.describe_security_groups()['SecurityGroups']
+                      # Run script for Config rule
+                      for group in security_groups:
+                      # Loop through each ingress rule in the security group
+                          for rule in group['IpPermissions']:
+                              # Check if the rule allows access from 0.0.0.0/0
+                              if rule.get('IpRanges') and rule['IpRanges'][0]['CidrIp'] == '0.0.0.0/0':
+                                  # Send non-compliant result to AWS Config
+                                  response = config.put_evaluations(
+                                      Evaluations=[
+                                          {
+                                              'ComplianceResourceType': 'AWS::EC2::SecurityGroup',
+                                              'ComplianceResourceId': group['GroupId'],
+                                              'ComplianceType': 'NON_COMPLIANT',
+                                              'Annotation': 'Security group allows access from 0.0.0.0/0',
+                                              'OrderingTimestamp': datetime.datetime.now(),
+
+                                          },
+                                      ],
+                                      ResultToken=event['resultToken'])
+                  
+                      return 'Success'
+              except:
+                  if event['source'] == 'aws.ec2':
+                          
+                  # Get the security group details
+                          security_group_id = event['detail']['requestParameters']['groupId']
+                          security_group = ec2.describe_security_groups(GroupIds=[security_group_id])['SecurityGroups'][0]
+                          security_group_name = ec2.describe_security_groups(GroupIds=[security_group_id])['SecurityGroups'][0]['GroupName']
+                          print(security_group_name)
+                          # Check if the security group has a port open to 0.0.0.0/0
+                          for rule in security_group['IpPermissions']:
+                              for ip_range in rule['IpRanges']:
+                                  if ip_range['CidrIp'] == '0.0.0.0/0':
+                                      if not email_sent:
+                                          send_alert_email(security_group_id,security_group_name)
+                                          email_sent = True
+                                      break
+                  else:
+                      pass
+
+
+          def send_alert_email(security_group_id,security_group_name):
+              # Connect to the SNS service
+              sns = boto3.client('sns')
+              # Send the email
+              sns.publish(
+                  TargetArn=LoadTopicArn,
+                  Message=f'Hi,\n  \r Security Group: {security_group_name} with Id {security_group_id} has a port open to 0.0.0.0/0. Please take necessary action to secure your group.',
+                  Subject='Security Group Alert',
+                  MessageStructure='string',
+                  MessageAttributes={
+                      'AWS.SNS.SMS.SMSType': {
+                          'DataType': 'String',
+                          'StringValue': 'Transactional'
+                      },
+                      'AWS.SNS.SMS.SenderID': {
+                          'DataType': 'String',
+                          'StringValue': 'Security'
+                      },
+                      'Content-Type': {
+                      'DataType': 'String',
+                      'StringValue': 'text/html'
+                      }
+                  }
+              )
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+  LambdaExecutionPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: lambda-execution-policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'logs:CreateLogGroup'
+            Resource: !Join 
+              - ''
+              - - 'arn:aws:logs:'
+                - !Ref 'AWS::Region'
+                - ':'
+                - !Ref 'AWS::AccountId'
+                - ':*'
+          - Effect: Allow
+            Action:
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Resource:
+              - !Join 
+                - ''
+                - - 'arn:aws:logs:'
+                  - !Ref 'AWS::Region'
+                  - ':'
+                  - !Ref 'AWS::AccountId'
+                  - ':log-group:/aws/lambda/'
+                  - !Ref LambdafnName
+                  - ':*'
+          - Effect: Allow
+            Action:
+              - config:*
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - ec2:DescribeSecurityGroups
+            Resource: "*"
+      Roles:
+        - !Ref LambdaExecutionRole
+  eventrulerole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - events.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+  eventrule:
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Description: Api call from cloudtrail to event rule trigger lambda
+      EventBusName: default
+      EventPattern: >-
+        {
+          "source": ["aws.ec2"],
+          "detail-type": ["AWS API Call via CloudTrail"],
+          "detail": {
+            "eventSource": ["ec2.amazonaws.com"],
+            "eventName": ["CreateSecurityGroup", "RevokeSecurityGroupIngress","AuthorizeSecurityGroupIngress","DescribeSecurityGroups","DescribeSecurityGroupRules"]
+          }
+        }  
+      Name: !Ref RuleName
+      RoleArn: !GetAtt 
+        - eventrulerole
+        - Arn
+      Targets:
+        - Arn: !GetAtt 
+            - Lambdafunction
+            - Arn
+          Id: !Ref Lambdafunction
+  EventBridgeLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !GetAtt 
+        - Lambdafunction
+        - Arn
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt 
+        - eventrule
+        - Arn
+  LambdaPermission:
+    DependsOn: Lambdafunction
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: 
+        Fn::GetAtt: 
+          - Lambdafunction
+          - Arn
+      Action: 'lambda:InvokeFunction'
+      Principal: 'config.amazonaws.com'
+  ConfigRule:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: !Ref ConfigRuleName
+      Description: Check for security groups that allow access from 0.0.0.0/0
+      Scope:
+        ComplianceResourceTypes:
+          - "AWS::EC2::SecurityGroup"
+      Source:
+        Owner: CUSTOM_LAMBDA
+        SourceIdentifier: !GetAtt Lambdafunction.Arn
+        SourceDetails:
+          - EventSource: aws.config
+            MessageType: ConfigurationItemChangeNotification    
+              
+Outputs:
+  LambdaFunctionArn:
+    Description: ARN of the Lambda function created by this template
+    Value: !GetAtt Lambdafunction.Arn
+    Export:
+      Name: !Join ['-', [!Ref 'AWS::StackName', 'lambda-function-arn']]
+  SNSTopicArn:
+    Description: ARN of the SNS topic created by this template
+    Value: !Ref SNSTopic
+    Export:
+      Name: !Join ['-', [!Ref 'AWS::StackName', 'sns-topic-arn']]
