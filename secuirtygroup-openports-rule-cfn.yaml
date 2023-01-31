@@ -8,21 +8,16 @@ Parameters:
     Default: securitygroup-openports-rule
   EmailGroupName:
     Type: String
-    Default: 'Developer-Group'
+    Default: 'Security-Group'
   ConfigRuleName:
     Type: String
     Default: 'securitygroup-openports'
   EndpointEmail:
     Type: String
-    Default: 'test@email.com'
 
 Resources:
-  SNSTopic:
-    Type: 'AWS::SNS::Topic'
-    Properties:
-      TopicName: 'Config'
 
-  DevEmailGroup:
+  EmailGroup:
     Type: 'AWS::SNS::Topic'
     Properties:
       TopicName: !Ref EmailGroupName
@@ -42,7 +37,7 @@ Resources:
       Handler: index.lambda_handler
       Environment:
         Variables:
-          TopicArn: !Ref SNSTopic
+          TopicArn: !Ref EmailGroup
       Code:
         ZipFile: |
           import boto3
@@ -173,6 +168,7 @@ Resources:
           - Effect: Allow
             Action:
               - config:*
+              - sns:Publish
             Resource: "*"
           - Effect: Allow
             Action:
@@ -261,6 +257,6 @@ Outputs:
       Name: !Join ['-', [!Ref 'AWS::StackName', 'lambda-function-arn']]
   SNSTopicArn:
     Description: ARN of the SNS topic created by this template
-    Value: !Ref SNSTopic
+    Value: !Ref EmailGroup
     Export:
       Name: !Join ['-', [!Ref 'AWS::StackName', 'sns-topic-arn']]
