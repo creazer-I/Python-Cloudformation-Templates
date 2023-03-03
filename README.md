@@ -10,4 +10,4 @@
 
 
 1. IamPolicySecurity.yaml
-Deletes Iam policy if wildcard is provided. 
+Automatically Deletes Iam policy if wildcard is provided. 
