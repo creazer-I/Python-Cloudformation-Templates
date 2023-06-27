@@ -1,0 +1,678 @@
+module "aurora-pgsql-primary" {
+
+  /******** Local source location of the module **************/
+source = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-aurora-postgresql/aws"
+version = "<Provide The Latest Version>"
+
+
+  /* Data Platform Technical Tags */
+  application-name     = var.application-name
+  bcp-tier             = "Tier-84"
+  created-by           = "<Provide HA_ID for this parameter>"
+  database-platform    = "A-PgSql"
+  database-state       = "Active"
+  db-patch-schedule    = "M09W4"
+  db-patch-time-window = "Sunday 0100"
+  environment          = var.environment
+  prepatch-snapshot-flag = "N"
+
+  /* Application Specific Tags */ 
+  application_tag1 = "NULL"
+  application_tag2 = "NULL" 
+  application_tag3 = "NULL" 
+  application_tag4 = "NULL"
+  application_tag5 = "NULL"
+
+  /***** Parameters Required for Aurora PgSql Primary region Resource Creation *****/
+
+  apply_immediately                   = true
+  aurorapostgresql_parameters         = "./AuroraPostgreSQL_PARAMETERS.json"
+  aws_rds_cluster_role_association    = true
+  enabled_cloudwatch_logs_exports     = ["postgresql"]
+  engine                              = "aurora-postgresql"
+  engine_version                      = "14.5"
+  family                              = "aurora-postgresql14"
+  feature_name                        = "s3Import"
+  iam_database_authentication_enabled = false
+  identifier                          = "00"
+  ingress_rules = [
+    {
+      from_port   = 5432
+      to_port     = 5432
+      protocol    = "tcp"
+      cidr_blocks = ["33.0.0.0/8"]
+      description = "Carelon OnPrem"
+    },
+    {
+      from_port   = 5432
+      to_port     = 5432
+      protocol    = "tcp"
+      cidr_blocks = ["30.0.0.0/8"]
+      description = "ElevanceHealth OnPrem"
+    },
+    {
+      from_port   = 5432
+      to_port     = 5432
+      protocol    = "tcp"
+      cidr_blocks = ["10.152.0.0/15"]
+      description = "ElevanceHealth Governance Team Application Servers in IBM Private Hosting - Ashburn"
+    },
+    {
+      from_port   = 5432
+      to_port     = 5432
+      protocol    = "tcp"
+      cidr_blocks = ["10.45.0.0/16"]
+      description = "ElevanceHealth vDaaS"
+    },
+    {
+      from_port   = 5432
+      to_port     = 5432
+      protocol    = "tcp"
+      cidr_blocks = ["10.112.248.0/22"]
+      description = "ElevanceHealth Hashi Vault Infrastructure"
+    },
+    {
+      from_port                = 5432
+      to_port                  = 5432
+      protocol                 = "tcp"
+      source_security_group_id = "${data.aws_security_group.db_security_group.id}"
+      description              = "ElevanceHealth PostScripts Automation"
+    },
+    {
+      from_port                = 5432
+      to_port                  = 5432
+      protocol                 = "tcp"
+      source_security_group_id = "<SECURITY GROUP ID>"
+      description              = "Application Tier Security Group ID"
+    }
+  ]
+  instance_class                                = ["db.r6g.large"]
+  instance_count                                = 1
+  kms_key_id                                    = lookup(module.kms_service_aurora_primary.kms_arn, "aurora")
+  kms_key_id_log_group                          = lookup(module.kms_service_aurora_primary.kms_arn, "logs")
+  monitoring_interval                           = "5"
+  monitoring_role_arn                           = module.iam-enhanced-monitoring-role.iamrole_arn
+  performance_insights_enabled                  = true 
+  performance_insights_kms_key_id               = lookup(module.kms_service_aurora_primary.kms_arn, "aurora")
+  performance_insights_retention_period         = "7"
+  port                                          = "5432"
+  preferred_backup_window_cluster               = "22:00-00:00"
+  preferred_maintenance_window_cluster          = "Mon:00:00-Mon:03:00"
+  preferred_maintenance_window_cluster_instance = "sun:22:10-sun:22:40"
+  retention_in_days_aurora_postgresql           = 7
+  role_arn                                      = module.iam-enhanced-monitoring-role.iamrole_arn
+  serial_number                                 = "01"
+  tags                                          = module.mandatory_tags.tags
+  vpc_id                                        = data.aws_vpc.vpc.id
+}
+
+variable "create_s3_bucket" {
+  default = true
+}
+
+module "s3-bucket-aurora" {
+  source = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-s3/aws"
+  version = "<Provide The Latest Version>"
+
+  depends_on = [
+    module.aurora-pgsql-primary
+  ]
+
+  /***** Parameters Required for S3 Creation *****/
+  aws_kms_key_arn                       = var.create_s3_bucket == false ? "" : module.kms_service_aurora_primary.kms_arn["s3"]
+  bucket                                = lower("${module.aurora-pgsql-primary.id}-s3")
+  create_aws_s3_lifecycle_configuration = true
+  create_s3_bucket                      = var.create_s3_bucket
+  force_destroy                         = false
+  noncurrent_version_transition = [
+    {
+      "noncurrent_days" : 30,
+      "storage_class" : "STANDARD_IA"
+    }
+  ]
+  role = module.iam-enhanced-monitoring-role.iamrole_arn
+  tags = merge(module.mandatory_tags.tags, module.mandatory_data_tags.tags)
+  transition = [
+    {
+      "days" : 30,
+      "storage_class" : "STANDARD_IA"
+    }
+  ]
+}
+
+module "dataplatform_event_subscription_cluster" {
+
+  /******** Local source location of the module **************/
+  source  = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-db-event-subscription/aws"
+  version = "<Provide The Latest Version>"
+
+  /******** Parameter required for resource creation ****/
+  enabled          = true
+  event_categories = ["deletion", "failure", "failover", "notification", "low storage"]
+  name             = "antmdbes-dataplatform-cluster-${var.ATLAS_WORKSPACE_NAME}"
+  source_ids       = ["${module.aurora-pgsql-primary.id}"]
+  source_type      = "db-cluster"
+  tags             = module.mandatory_tags.tags
+
+/******** Parameter required for SNS resource creation ****/
+
+  delivery_policy        = "./delivery_policy.json"
+  sns_name               = "antmdbes-dataplatform-topic-${var.ATLAS_WORKSPACE_NAME}"
+  sns_topic_policy_json  = file("sns_rds_topic_policy.json")
+  subscribers = {
+    DD-DL-1 = {
+      protocol = "email"
+      endpoint = "event-juhmlmkj@dtdg.co"
+      endpoint_auto_confirms = true
+    },
+    DD-DL-2 = {
+      protocol = "email"
+      endpoint = "event-zbtwuuzw@dtdg.co"
+      endpoint_auto_confirms = true
+    },
+  }
+
+}
+
+/***** Parameters Required for Aurora KMS-Key Primary region Creation *****/
+module "kms_service_aurora_primary" {
+  source = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-kms-service/aws"
+  version = "<Provide The Latest Version>"
+
+  description    = "KMS for Aurora PgSQL"
+  kms_alias_name = "${var.application-name}-${var.environment}"
+  service_name   = ["aurora", "logs", "s3"]
+  tags           = module.mandatory_tags.tags
+
+}
+
+/***** Parameters Required for Aurora pgsql Global DB Enhanced monitoring IAM role *****/
+module "iam-enhanced-monitoring-role" {
+
+  /***** Source location of the module *****/
+  source = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-iam-role/aws"
+  version = "<Provide The Latest Version>"
+
+  /***** Parameters Required for aurora-pgsql Enhanced monitoring IAM role *****/
+  assume_role_service_names = ["monitoring.rds.amazonaws.com", "s3.amazonaws.com", "rds.amazonaws.com"]
+  force_detach_policies     = true
+  iam_role_name             = module.aurora-pgsql-primary.iam_role_name
+  managed_policy_arns       = ["arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"]
+  inline_policy = [{
+     name   = "policy-s3-replication"
+     policy = file("./aurora-s3-integration-policy.json")
+  }]
+  role_description          = "Allow aurora_pgsql to send enhanced monitoring metrics to CloudWatch Logs"
+  tags                      = module.mandatory_tags.tags
+}
+
+/**********************************************START POST SCRIPTS AUTOMATION****************************************************/
+
+locals {
+  region     = data.aws_region.current.name == "us-east-1" ? "primary-us-east-1-plat" : "secondary-us-east-2-plat"
+  endpoint   = data.aws_region.current.name == "us-east-1" ? "https://bucket.vpce-0c65760352332dd5a-qahda5nv.s3.us-east-1.vpce.amazonaws.com" : "https://bucket.vpce-0157fc5f0d4d2b003-zy0yy31z.s3.us-east-2.vpce.amazonaws.com"
+  aws_region = data.aws_region.current.name
+}
+
+module "terraform-aws-ec2" {
+
+  depends_on = [ module.aurora-pgsql-primary]
+
+  source  = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-ec2/aws"
+  version = "<Provide The Latest Version>"
+
+/******** Parameter required for EC2 resource creation ****/
+
+  vpc_security_group_ids               = [data.aws_security_group.db_security_group.id]
+  kms_key_id                           = module.kms_service_ec2.kms_arn["ec2"]
+  instance_ami                         = data.aws_ami.antm-golden-dbclients.id
+  instance_name                        = "${module.mandatory_tags.tags["application-name"]}-${module.mandatory_tags.tags["environment"]}-${module.mandatory_tags.tags["business-division"]}"
+  delete_on_termination                = true
+  disable_api_termination              = false
+  number_of_instances                  = 1
+  subnet_ids                           = data.aws_subnets.private.ids
+  instance_initiated_shutdown_behavior = "terminate"
+  iam_instance_profile                 = "CMDBLambdaRole"
+  root_volume_size                     = "120"
+  tags                                 = module.mandatory_tags.tags
+  user_data = <<EOF
+#!/bin/bash -xe
+
+sudo su
+exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+cd /home/ec2-user
+
+
+eval $(aws sts assume-role \
+ --role-arn arn:aws:iam::868159525660:role/CROSS-ACCOUNT-ROLE-SECRETS-TO-LAMBDA-RDS \
+ --role-session-name=test --duration-seconds 900 \
+ --query 'join(``, [`export `, `AWS_ACCESS_KEY_ID=`, 
+ Credentials.AccessKeyId, ` ; export `, `AWS_SECRET_ACCESS_KEY=`,
+ Credentials.SecretAccessKey, `; export `, `AWS_SESSION_TOKEN=`,
+ Credentials.SessionToken])' \
+ --output text)
+
+
+aws s3 cp s3://antmdb-dbaservices-${local.region}/apsql/postscript/sql apsql_scripts --recursive --region ${local.aws_region}
+
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+export environment=${var.environment}
+export Hostname=${module.aurora-pgsql-primary.cluster_endpoint}
+
+export PGPASSWORD='${module.aurora-pgsql-primary.result}'
+
+cd apsql_scripts
+
+psql --host=${module.aurora-pgsql-primary.cluster_endpoint} --port=5432 --username=antmsysdba --dbname=postgres < apsql_main.sql > apsql_main.log 2>&1
+
+chmod 777 Reset-Infra-Accounts-Credentials-Password-Aurora-PGSQL.sh
+
+source Reset-Infra-Accounts-Credentials-Password-Aurora-PGSQL.sh
+
+eval $(aws sts assume-role \
+ --role-arn arn:aws:iam::868159525660:role/CROSS-ACCOUNT-ROLE-SECRETS-TO-LAMBDA-RDS \
+ --role-session-name=test --duration-seconds 900 \
+ --query 'join(``, [`export `, `AWS_ACCESS_KEY_ID=`, 
+ Credentials.AccessKeyId, ` ; export `, `AWS_SECRET_ACCESS_KEY=`,
+ Credentials.SecretAccessKey, `; export `, `AWS_SESSION_TOKEN=`,
+ Credentials.SessionToken])' \
+ --output text)
+
+aws s3 cp apsql_main.log s3://antmdb-dbaservices-${local.region}/apsql/postscript/logs/${module.aurora-pgsql-primary.cluster_endpoint}/apsql_main.log --region ${local.aws_region}
+
+aws s3 cp Reset-Infra-Accounts-Credentials-Password-Aurora-PGSQL.log s3://antmdb-dbaservices-${local.region}/apsql/postscript/logs/${module.aurora-pgsql-primary.cluster_endpoint}/Reset-Infra-Accounts-Credentials-Password-Aurora-PGSQL.log --region ${local.aws_region}
+
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+shutdown -h now
+
+EOF
+
+}
+
+module "kms_service_ec2" {
+  
+  source = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-kms-service/aws"
+  version = "<Provide The Latest Version>"  
+
+  description      = "KMS for EC2"
+  kms_alias_name   = "${var.application-name}-${var.environment}"
+  service_name     = ["ec2"]
+  tags             = module.mandatory_tags.tags
+
+}
+
+/**********************************************POST SCRIPTS AUTOMATION ENDING****************************************************/
+
+module "aurora-pgsql-secondary" {
+
+  /******** Local source location of the module **************/
+source = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-aurora-postgresql/aws"
+version = "<Provide The Latest Version>"
+
+depends_on = [module.aurora-pgsql-primary]
+
+  providers = {
+    aws = aws.secondary
+  }
+
+  /* Data Platform Technical Tags */
+  application-name     = var.application-name
+  bcp-tier             = "Tier-84"
+  created-by           = "<Provide HA_ID for this parameter>"
+  database-platform    = "A-PgSql"
+  database-state       = "Active"
+  db-patch-schedule    = "M09W4"
+  db-patch-time-window = "Sunday 0100"
+  environment          = var.environment
+  prepatch-snapshot-flag = "N"
+
+  /* Application Specific Tags */ 
+  application_tag1 = "NULL"
+  application_tag2 = "NULL" 
+  application_tag3 = "NULL" 
+  application_tag4 = "NULL"
+  application_tag5 = "NULL"
+
+  /***** Parameters Required for Aurora PgSql Secondary region Resource Creation *****/
+
+  apply_immediately                   = true
+  aurorapostgresql_parameters         = "./AuroraPostgreSQL_PARAMETERS_CRRR.json"
+  enabled_cloudwatch_logs_exports     = ["postgresql"]
+  engine                              = "aurora-postgresql"
+  engine_version                      = "14.5"
+  final_snapshot_identifier           = null
+  family                              = "aurora-postgresql14"
+  global_cluster_identifier           = module.aurora-pgsql-global.global_cluster_identifier
+  iam_database_authentication_enabled = false
+  identifier                          = "90"
+  ingress_rules = [
+    {
+      from_port   = 5432
+      to_port     = 5432
+      protocol    = "tcp"
+      cidr_blocks = ["33.0.0.0/8"]
+      description = "Carelon OnPrem"
+    },
+    {
+      from_port   = 5432
+      to_port     = 5432
+      protocol    = "tcp"
+      cidr_blocks = ["30.0.0.0/8"]
+      description = "ElevanceHealth OnPrem"
+    },
+    {
+      from_port   = 5432
+      to_port     = 5432
+      protocol    = "tcp"
+      cidr_blocks = ["10.152.0.0/15"]
+      description = "ElevanceHealth Governance Team Application Servers in IBM Private Hosting - Ashburn"
+    },
+    {
+      from_port   = 5432
+      to_port     = 5432
+      protocol    = "tcp"
+      cidr_blocks = ["10.45.0.0/16"]
+      description = "ElevanceHealth vDaaS"
+    },
+    {
+      from_port   = 5432
+      to_port     = 5432
+      protocol    = "tcp"
+      cidr_blocks = ["10.112.248.0/22"]
+      description = "ElevanceHealth Hashi Vault Infrastructure"
+    },
+    {
+      from_port                = 5432
+      to_port                  = 5432
+      protocol                 = "tcp"
+      source_security_group_id = "<SECURITY GROUP ID>"
+      description              = "Application Tier Security Group ID"
+    }
+  ]
+  instance_class                                = ["db.r6g.large"]
+  instance_count                                = 1
+  kms_key_id                                    = lookup(module.kms_service_aurora_secondary.kms_arn, "aurora")
+  kms_key_id_log_group                          = lookup(module.kms_service_aurora_secondary.kms_arn, "logs")
+  monitoring_interval                           = "5"
+  monitoring_role_arn                           = module.iam-enhanced-monitoring-role-secondary.iamrole_arn
+  performance_insights_enabled                  = true 
+  performance_insights_kms_key_id               = lookup(module.kms_service_aurora_secondary.kms_arn, "aurora")
+  performance_insights_retention_period         = "7"
+  port                                          = "5432"
+  primary_arn                                   = module.aurora-pgsql-primary.arn
+  preferred_backup_window_cluster               = "22:00-00:00"
+  preferred_maintenance_window_cluster          = "Mon:00:00-Mon:03:00"
+  preferred_maintenance_window_cluster_instance = "sun:22:10-sun:22:40"
+  primary_cluster                               = false
+  read_replica                                  = true
+  retention_in_days_aurora_postgresql           = 7
+  serial_number                                 = "01"
+  skip_final_snapshot                           = true
+  source_region                                 = "us-east-1"
+  tags                                          = module.mandatory_tags.tags
+  vpc_id                                        = data.aws_vpc.secondary.id
+}
+
+/***** Parameters Required for Aurora KMS-Key Secondary region Creation *****/
+module "kms_service_aurora_secondary" {
+  source = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-kms-service/aws"
+  version = "<Provide The Latest Version>"
+
+  providers = {
+    aws = aws.secondary
+  }
+
+  description    = "KMS for Aurora PgSQL"
+  kms_alias_name = "${var.application-name}-${var.environment}"
+  service_name   = ["aurora", "logs"]
+  tags           = module.mandatory_tags.tags
+
+}
+
+module "dataplatform_event_subscription_cluster_secondary" {
+
+  /******** Local source location of the module **************/
+  source  = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-db-event-subscription/aws"
+  version = "<Provide The Latest Version>"
+
+  providers = {
+    aws = aws.secondary
+  }
+
+  /******** Parameter required for resource creation ****/
+  enabled          = true
+  event_categories = ["deletion", "failure", "failover", "notification", "low storage"]
+  name             = "antmdbes-dataplatform-cluster-${var.ATLAS_WORKSPACE_NAME}"
+  source_ids       = ["${module.aurora-pgsql-secondary.id}"]
+  source_type      = "db-cluster"
+  tags             = module.mandatory_tags.tags
+
+/******** Parameter required for SNS resource creation ****/
+
+  delivery_policy        = "./delivery_policy.json"
+  sns_name               = "antmdbes-dataplatform-topic-${var.ATLAS_WORKSPACE_NAME}"
+  sns_topic_policy_json  = file("sns_rds_topic_policy_CRRR.json")
+  subscribers = {
+    DD-DL-1 = {
+      protocol = "email"
+      endpoint = "event-juhmlmkj@dtdg.co"
+      endpoint_auto_confirms = true
+    },
+    DD-DL-2 = {
+      protocol = "email"
+      endpoint = "event-zbtwuuzw@dtdg.co"
+      endpoint_auto_confirms = true
+    },
+  }
+
+}
+
+/***** Parameters Required for Aurora pgsql Global DB Enhanced monitoring IAM role *****/
+module "iam-enhanced-monitoring-role-secondary" {
+
+  /***** Source location of the module *****/
+  source = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-iam-role/aws"
+  version = "<Provide The Latest Version>"
+
+  providers = {
+    aws = aws.secondary
+  }
+
+  /***** Parameters Required for aurora-pgsql Enhanced monitoring IAM role *****/
+  assume_role_service_names = ["monitoring.rds.amazonaws.com", "s3.amazonaws.com", "rds.amazonaws.com"]
+  force_detach_policies     = true
+  iam_role_name             = module.aurora-pgsql-secondary.iam_role_name
+  managed_policy_arns       = ["arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"]
+  role_description          = "Allow aurora_pgsql to send enhanced monitoring metrics to CloudWatch Logs"
+  tags                      = module.mandatory_tags.tags
+}
+
+
+module "aurora-pgsql-global" {
+
+  /***** Local Source location of the module *****/
+ source = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-aurora-pgsql-global-cluster/aws"
+ version = "<Provide The Latest Version>"
+
+  /***** Parameters Required for Aurora MySql Global DB Resource Creation *****/
+
+  application-name                    = var.application-name
+  environment                         = var.environment
+  family                              = "aurora-postgresql13"
+  global_cluster_deletion_protection  = false
+  identifier                          = "00"
+  serial_number                       = "01"
+  source_db_cluster_identifier        = module.aurora-pgsql-primary.arn
+}
+
+/***************Autoscaling policy*******************/
+
+module "iam-appautoscaling-role" {
+
+  /***** Source location of the module *****/
+  source = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-iam-role/aws"
+  version = "<Provide The Latest Version>"
+
+  /***** Parameters Required for APP autoscaling Enhanced monitoring IAM role *****/
+  assume_role_service_names = ["ec2.application-autoscaling.amazonaws.com"]
+  force_detach_policies     = true
+  iam_role_name             = "iam-appautoscaling-aurora-test"
+   inline_policy = [{
+     name   = "policy-appautoscaling"
+     policy = file("./iam-policy.json")
+   }]
+  role_description = "Allow APPautoscaling policy for aurora pgsql"
+  tags = module.mandatory_tags.tags
+}
+
+module "auto_scaling_aurora_pgsql_target_primary_cpu" {
+
+  source = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-appautoscaling-target/aws"
+  version = "<Provide The Latest Version>"
+
+  /***** Parameters Required for App Autoscaling Target Creation *****/
+
+  max_capacity       = 10
+  min_capacity       = 1
+  resource_id        = "cluster:${module.aurora-pgsql-primary.id}"
+  role_arn           = module.iam-appautoscaling-role.iamrole_arn
+  scalable_dimension = "rds:cluster:ReadReplicaCount"
+  service_namespace  = "rds"
+}
+
+module "auto_scaling_aurora_pgsql_policy_primary_cpu" {
+
+  source = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-appautoscaling-policy/aws"
+  version = "<Provide The Latest Version>"
+
+  /***** Parameters Required for App Autoscaling Polcy Creation *****/
+
+  name                   = "cpu-auto-scaling:${module.auto_scaling_aurora_pgsql_target_primary_cpu.resource_id}"
+  policy_type            = "TargetTrackingScaling"
+  predefined_metric_type = "RDSReaderAverageCPUUtilization"
+  resource_id            = "${module.auto_scaling_aurora_pgsql_target_primary_cpu.resource_id}"
+  scalable_dimension     = "${module.auto_scaling_aurora_pgsql_target_primary_cpu.scalable_dimension}"
+  service_namespace      = "${module.auto_scaling_aurora_pgsql_target_primary_cpu.service_namespace}"
+  scale_in_cooldown      = 300
+  scale_out_cooldown     = 300
+  target_value           = 75
+}
+
+#module "auto_scaling_aurora_pgsql_target_primary_connections" {
+#
+#  source = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-appautoscaling-target/aws"
+#  version = "<Provide The Latest Version>"
+#
+#  /***** Parameters Required for App Autoscaling Target Creation *****/
+#
+#  max_capacity = 10
+#  min_capacity = 1
+#  resource_id  = "cluster:${module.aurora-pgsql-primary.id}"
+#  role_arn     = module.iam-appautoscaling-role.iamrole_arn
+#  scalable_dimension = "rds:cluster:ReadReplicaCount"
+#  service_namespace  = "rds"
+#}
+#
+#module "auto_scaling_aurora_pgsql_policy_primary_connections" {
+#
+# source = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-appautoscaling-policy/aws"
+# version = "<Provide The Latest Version>"
+#
+#  /***** Parameters Required for App Autoscaling Polcy Creation *****/
+#
+#  name               = "cpu-auto-scaling:${module.auto_scaling_aurora_pgsql_target_primary_connections.resource_id}"
+#  policy_type        = "TargetTrackingScaling"
+#  predefined_metric_type = "RDSReaderAverageDatabaseConnections"
+#  resource_id        = "${module.auto_scaling_aurora_pgsql_target_primary_connections.resource_id}"
+#  scalable_dimension = "${module.auto_scaling_aurora_pgsql_target_primary_connections.scalable_dimension}"
+#  service_namespace  = "${module.auto_scaling_aurora_pgsql_target_primary_connections.service_namespace}"
+#  scale_in_cooldown  = 300
+#  scale_out_cooldown = 300
+#  target_value       = 75
+#}
+
+  /****************Secodary********************/
+
+module "auto_scaling_aurora_pgsql_target_secondary_cpu" {
+
+  source = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-appautoscaling-target/aws"
+  version = "<Provide The Latest Version>"
+
+ providers = {
+    aws = aws.secondary
+  }
+
+  /***** Parameters Required for App Autoscaling Target Creation *****/
+
+  max_capacity       = 10
+  min_capacity       = 1
+  resource_id        = "cluster:${module.aurora-pgsql-secondary.id}"
+  role_arn           = module.iam-appautoscaling-role.iamrole_arn
+  scalable_dimension = "rds:cluster:ReadReplicaCount"
+  service_namespace  = "rds"
+}
+
+module "auto_scaling_aurora_pgsql_policy_secondary_cpu" {
+
+  source = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-appautoscaling-policy/aws"
+  version = "<Provide The Latest Version>"
+
+providers = {
+    aws = aws.secondary
+  }
+
+  /***** Parameters Required for App Autoscaling Polcy Creation *****/
+
+  name                   = "cpu-auto-scaling:${module.auto_scaling_aurora_pgsql_target_secondary_cpu.resource_id}"
+  policy_type            = "TargetTrackingScaling"
+  predefined_metric_type = "RDSReaderAverageCPUUtilization"
+  resource_id            = "${module.auto_scaling_aurora_pgsql_target_secondary_cpu.resource_id}"
+  scalable_dimension     = "${module.auto_scaling_aurora_pgsql_target_secondary_cpu.scalable_dimension}"
+  service_namespace      = "${module.auto_scaling_aurora_pgsql_target_secondary_cpu.service_namespace}"
+  scale_in_cooldown      = 300
+  scale_out_cooldown     = 300
+  target_value           = 75
+}
+
+#module "auto_scaling_aurora_pgsql_target_secondary_connections" {
+#
+#  source = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-appautoscaling-target/aws"
+#  version = "<Provide The Latest Version>"
+#
+# providers = {
+#    aws = aws.secondary
+#  }
+#
+#  /***** Parameters Required for App Autoscaling Target Creation *****/
+#
+#  max_capacity = 10
+#  min_capacity = 1
+#  resource_id  = "cluster:${module.aurora-pgsql-secondary.id}"
+#  role_arn     = module.iam-appautoscaling-role.iamrole_arn
+#  scalable_dimension = "rds:cluster:ReadReplicaCount"
+#  service_namespace  = "rds"
+#}
+#
+#module "auto_scaling_aurora_pgsql_policy_secondary_connections" {
+#
+#source = "cps-terraform.anthem.com/<ORGANIZATION-NAME>/terraform-aws-appautoscaling-policy/aws"
+#version = "<Provide The Latest Version>"
+#
+#providers = {
+#    aws = aws.secondary
+#  }
+#
+#  /***** Parameters Required for App Autoscaling Polcy Creation *****/
+#
+#  name               = "cpu-auto-scaling:${module.auto_scaling_aurora_pgsql_target_secondary_connections.resource_id}"
+#  policy_type        = "TargetTrackingScaling"
+#  predefined_metric_type = "RDSReaderAverageDatabaseConnections"
+#  resource_id        = "${module.auto_scaling_aurora_pgsql_target_secondary_connections.resource_id}"
+#  scalable_dimension = "${module.auto_scaling_aurora_pgsql_target_secondary_connections.scalable_dimension}"
+#  service_namespace  = "${module.auto_scaling_aurora_pgsql_target_secondary_connections.service_namespace}"
+#  scale_in_cooldown  = 300
+#  scale_out_cooldown = 300
+#  target_value = 75
+#}
