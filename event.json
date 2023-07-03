@@ -1,0 +1,181 @@
+{
+    "eventVersion": "1.08",
+    "userIdentity": {
+        "type": "Root",
+        "principalId": "393192817027",
+        "arn": "arn:aws:iam::393192817027:root",
+        "accountId": "393192817027",
+        "accessKeyId": "ASIAVXDA6IGBSSUML6HU",
+        "sessionContext": {
+            "sessionIssuer": {},
+            "webIdFederationData": {},
+            "attributes": {
+                "creationDate": "2023-07-03T14:29:33Z",
+                "mfaAuthenticated": "false"
+            }
+        }
+    },
+    "eventTime": "2023-07-03T14:47:29Z",
+    "eventSource": "rds.amazonaws.com",
+    "eventName": "CreateDBInstance",
+    "awsRegion": "us-east-1",
+    "sourceIPAddress": "103.185.198.239",
+    "userAgent": "AWS Internal",
+    "requestParameters": {
+        "dBInstanceIdentifier": "test-db-mysql",
+        "enablePerformanceInsights": false,
+        "deletionProtection": false,
+        "dBSubnetGroupName": "default",
+        "engine": "mysql",
+        "publiclyAccessible": false,
+        "enableIAMDatabaseAuthentication": false,
+        "masterUsername": "maddt",
+        "cACertificateIdentifier": "rds-ca-2019",
+        "allocatedStorage": 20,
+        "backupRetentionPeriod": 1,
+        "dBName": "",
+        "multiTenant": false,
+        "port": 3306,
+        "multiAZ": false,
+        "enableCloudwatchLogsExports": [],
+        "vpcSecurityGroupIds": [
+            "sg-0ee83dd2e58e96d1c"
+        ],
+        "copyTagsToSnapshot": true,
+        "storageType": "gp2",
+        "dBParameterGroupName": "default.mysql8.0",
+        "storageEncrypted": true,
+        "engineVersion": "8.0.32",
+        "dBInstanceClass": "db.t3.micro",
+        "masterUserPassword": "HIDDEN_DUE_TO_SECURITY_REASONS",
+        "autoMinorVersionUpgrade": true,
+        "optionGroupName": "default:mysql-8-0"
+    },
+    "responseElements": {
+        "dBInstanceArn": "arn:aws:rds:us-east-1:393192817027:db:test-db-mysql",
+        "storageEncrypted": true,
+        "certificateDetails": {
+            "cAIdentifier": "rds-ca-2019"
+        },
+        "preferredBackupWindow": "05:53-06:23",
+        "backupTarget": "region",
+        "preferredMaintenanceWindow": "wed:04:33-wed:05:03",
+        "backupRetentionPeriod": 1,
+        "allocatedStorage": 20,
+        "storageType": "gp2",
+        "engineVersion": "8.0.32",
+        "dbInstancePort": 0,
+        "associatedRoles": [],
+        "optionGroupMemberships": [
+            {
+                "status": "in-sync",
+                "optionGroupName": "default:mysql-8-0"
+            }
+        ],
+        "dBParameterGroups": [
+            {
+                "dBParameterGroupName": "default.mysql8.0",
+                "parameterApplyStatus": "in-sync"
+            }
+        ],
+        "monitoringInterval": 0,
+        "dBInstanceClass": "db.t3.micro",
+        "readReplicaDBInstanceIdentifiers": [],
+        "dBSubnetGroup": {
+            "dBSubnetGroupName": "default",
+            "dBSubnetGroupDescription": "default",
+            "subnets": [
+                {
+                    "subnetAvailabilityZone": {
+                        "name": "us-east-1e"
+                    },
+                    "subnetIdentifier": "subnet-07ee447d04f52daa9",
+                    "subnetOutpost": {},
+                    "subnetStatus": "Active"
+                },
+                {
+                    "subnetAvailabilityZone": {
+                        "name": "us-east-1f"
+                    },
+                    "subnetIdentifier": "subnet-0d388f8a3e3dd966e",
+                    "subnetOutpost": {},
+                    "subnetStatus": "Active"
+                },
+                {
+                    "subnetAvailabilityZone": {
+                        "name": "us-east-1a"
+                    },
+                    "subnetIdentifier": "subnet-0121441f0fc95b51f",
+                    "subnetOutpost": {},
+                    "subnetStatus": "Active"
+                },
+                {
+                    "subnetAvailabilityZone": {
+                        "name": "us-east-1d"
+                    },
+                    "subnetIdentifier": "subnet-03f3913ffaa23de25",
+                    "subnetOutpost": {},
+                    "subnetStatus": "Active"
+                },
+                {
+                    "subnetAvailabilityZone": {
+                        "name": "us-east-1b"
+                    },
+                    "subnetIdentifier": "subnet-0bd78966ade09b31f",
+                    "subnetOutpost": {},
+                    "subnetStatus": "Active"
+                },
+                {
+                    "subnetAvailabilityZone": {
+                        "name": "us-east-1c"
+                    },
+                    "subnetIdentifier": "subnet-07f61da333a77c74b",
+                    "subnetOutpost": {},
+                    "subnetStatus": "Active"
+                }
+            ],
+            "vpcId": "vpc-07751fcd4de6d8eb8",
+            "subnetGroupStatus": "Complete"
+        },
+        "masterUsername": "maddt",
+        "multiAZ": false,
+        "autoMinorVersionUpgrade": true,
+        "engine": "mysql",
+        "dedicatedLogVolume": false,
+        "httpEndpointEnabled": false,
+        "cACertificateIdentifier": "rds-ca-2019",
+        "dbiResourceId": "db-DRWSZ4LCRD6LT4SVA4DMLOK6RM",
+        "deletionProtection": false,
+        "dBSecurityGroups": [],
+        "pendingModifiedValues": {
+            "masterUserPassword": "HIDDEN_DUE_TO_SECURITY_REASONS"
+        },
+        "customerOwnedIpEnabled": false,
+        "storageThroughput": 0,
+        "dBInstanceStatus": "creating",
+        "publiclyAccessible": false,
+        "domainMemberships": [],
+        "copyTagsToSnapshot": true,
+        "dBInstanceIdentifier": "test-db-mysql",
+        "licenseModel": "general-public-license",
+        "tagList": [],
+        "networkType": "IPV4",
+        "iAMDatabaseAuthenticationEnabled": false,
+        "performanceInsightsEnabled": false,
+        "vpcSecurityGroups": [
+            {
+                "status": "active",
+                "vpcSecurityGroupId": "sg-0ee83dd2e58e96d1c"
+            }
+        ],
+        "kmsKeyId": "arn:aws:kms:us-east-1:393192817027:key/907fe155-7b11-4848-b1d6-9e03279f779d"
+    },
+    "requestID": "493b90dc-e3d7-4053-905f-341a23a144cb",
+    "eventID": "b6ff7498-c334-4bd7-9818-887fa5d04e7f",
+    "readOnly": false,
+    "eventType": "AwsApiCall",
+    "managementEvent": true,
+    "recipientAccountId": "393192817027",
+    "eventCategory": "Management",
+    "sessionCredentialFromConsole": "true"
+}
