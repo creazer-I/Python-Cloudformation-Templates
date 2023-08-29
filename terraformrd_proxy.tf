@@ -1,4 +1,4 @@
-##https://prod.liveshare.vsengsaas.visualstudio.com/join?6351FC3C16E863A8785DFD860F5DA75EA2C9
+##https://prod.liveshare.vsengsaas.visualstudio.com/join?4DD4FF31E3AD8EA09BF066DD030C319AC64B
 resource "aws_db_proxy" "db_proxy" {
   name                   = var.name
   debug_logging          = var.debug_logging == "" ? null : var.debug_logging
