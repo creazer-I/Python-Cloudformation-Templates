@@ -1,4 +1,4 @@
-https://prod.liveshare.vsengsaas.visualstudio.com/join?CD1DA17466A184D35748F150C863D29FE7E9
+https://prod.liveshare.vsengsaas.visualstudio.com/join?0DC2970D0B4272EB950B6E28FE8C06EFE106
 import json
 import urllib3
 import os
