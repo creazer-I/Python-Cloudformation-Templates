@@ -4,7 +4,7 @@ sg-80-443
 
 html/
 
-https://prod.liveshare.vsengsaas.visualstudio.com/join?F4C4DBB2724FE0C96CC61382FF8C391954C2
+https://prod.liveshare.vsengsaas.visualstudio.com/join?B2123F8F4E753CB87808D4F566C1AAB93EA9
 
 
 https://techcommunity.microsoft.com/t5/fasttrack-for-azure/how-to-create-a-vpn-between-azure-and-aws-using-only-managed/ba-p/2281900
